@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import FileDropzone from '../components/FileDropzone.vue' ;
+import FileDropzone from '@/components/FileDropzone.vue' ;
+import postSheetService from '@/services/post-sheet.service';
 
-const handleFiles = (files: FileList, setMessage: (message: string, error?: boolean) => void) => {
+const handleFiles = async (files: FileList, setMessage: (message: string, error?: boolean) => void) => {
   setMessage('Carregando...');
 
   const validExtensionsRegex = new RegExp(/\.(csv|xlsx)$/i);
@@ -13,7 +14,16 @@ const handleFiles = (files: FileList, setMessage: (message: string, error?: bool
     return;
   }
 
-  console.log(files);
+  try {
+    const formData = new FormData();
+
+    formData.append('file', files.item(0) as File);
+
+    await postSheetService(formData);
+  } catch {
+    return setMessage('Erro ao processar arquivo', true);
+  }
+
   setMessage('Arquivo carregado com sucesso!');
 };
 </script>

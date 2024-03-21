@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps, reactive, ref, watchEffect, withDefaults } from 'vue';
+import { reactive, ref, watchEffect, withDefaults } from 'vue';
 
 type Props = {
   message?: string;
