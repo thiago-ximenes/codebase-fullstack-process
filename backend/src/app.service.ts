@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import * as csvParser from 'csv-parser';
 import * as xlsx from 'xlsx';
 import { Subscriber } from './types/subscriber.type';
+import { FileException } from './exceptions/file.exception';
+import { MetricsByMonth } from './dto/metrics-by-month.dto';
+import { MonthMetrics } from './dto/month-metrics.dto';
 
 @Injectable()
 export class AppService {
@@ -18,6 +21,10 @@ export class AppService {
       [this.xlsxMimeType]: this.processXlsx,
     };
 
+    if (!(file.mimetype in processes)) {
+      throw FileException.invalidMimeType();
+    }
+
     const process = processes[file.mimetype];
 
     const subscribers = await process(file);
@@ -31,10 +38,8 @@ export class AppService {
     const subscribers: Subscriber[] = [];
 
     csvParser()
-      .on('data', (row) => {
-        row['data início'] = new Date(row['data início']);
-        row['data status'] = new Date(row['data status']);
-        subscribers.push(row);
+      .on('data', (subscriber: Subscriber) => {
+        subscribers.push(this.parseSubscribersDate(subscriber));
       })
       .write(file.buffer);
 
@@ -50,42 +55,44 @@ export class AppService {
       raw: false,
     });
 
-    subscribers.forEach((subscriber) => {
-      subscriber['data início'] = new Date(subscriber['data início']);
-      subscriber['data status'] = new Date(subscriber['data status']);
-    });
+    subscribers.forEach(this.parseSubscribersDate);
 
     return subscribers;
   };
 
   private calculateMetrics = (subscribers: Subscriber[]) => {
-    const metricsByMonth = {};
+    const metricsByMonth = new MetricsByMonth();
 
     subscribers.forEach((subscriber) => {
       const month = subscriber['data início'].getMonth();
-
-      if (!metricsByMonth[month]) {
-        metricsByMonth[month] = {
-          mrr: 0,
-          churnRate: 0,
-          activeSubscribers: 0,
-          cancelledSubscribers: 0,
-        };
-      }
-
-      if (subscriber.status === 'Ativa') {
-        metricsByMonth[month].mrr += Number(subscriber.valor);
-        metricsByMonth[month].activeSubscribers++;
-      } else if (subscriber.status === 'Cancelada') {
-        metricsByMonth[month].cancelledSubscribers++;
-      }
-
-      metricsByMonth[month].churnRate =
-        metricsByMonth[month].cancelledSubscribers /
-        (metricsByMonth[month].activeSubscribers +
-          metricsByMonth[month].cancelledSubscribers);
+      const metrics = metricsByMonth.getMetricsForMonth(month);
+      this.executeActionBasedOnSubscriberStatus(metrics, subscriber);
     });
 
-    return metricsByMonth;
+    return metricsByMonth.getMetrics();
+  };
+
+  private executeActionBasedOnSubscriberStatus = (
+    metrics: MonthMetrics,
+    subscriber: Subscriber,
+  ) => {
+    const subscriberStatusActions = {
+      Ativa: (metrics: MonthMetrics, subscriber: Subscriber) =>
+        metrics.addActiveSubscriber(subscriber.valor),
+      Cancelada: (metrics: MonthMetrics) => metrics.addCancelledSubscriber(),
+    };
+
+    const action = subscriberStatusActions[subscriber.status];
+    if (action) {
+      action(metrics, subscriber);
+    }
+  };
+
+  private parseSubscribersDate = (subscriber: Subscriber) => {
+    subscriber['data início'] = new Date(subscriber['data início']);
+    subscriber['data status'] = new Date(subscriber['data status']);
+    subscriber['data cancelamento'] = new Date(subscriber['data cancelamento']);
+
+    return subscriber;
   };
 }
