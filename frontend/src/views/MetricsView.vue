@@ -19,15 +19,23 @@
 import BarMetricsChart from '@/components/BarMetricsChart.vue';
 import LineMetricsChart from "@/components/LineMetricsChart.vue";
 import { useMetricsStore } from "@/store/metrics.store";
+import { watchEffect } from "vue";
+import { useRouter } from "vue-router";
 
 const metricsStore = useMetricsStore();
+const router = useRouter();
 
-const mrr = Object.values(metricsStore.metrics.mrr)
-const keys = Object.keys(metricsStore.metrics.mrr)
+watchEffect(() => {
+  if (!Object.values(metricsStore.metrics).length) {
+    router.push({ name: "Home" });
+  }
+});
 
-const cr = Object.values(metricsStore.metrics.cr)
-cr.forEach((metric) => console.log(metric.flatMap((m) => Number(m.rate.replace('%', '').replace(',', '.')))))
+const mrr = Object.values(metricsStore.metrics?.mrr || {})
+const keys = Object.keys(metricsStore.metrics?.mrr || {})
 
-const keysCr = Object.keys(metricsStore.metrics.cr)
+const cr = Object.values(metricsStore.metrics?.cr || {})
+
+const keysCr = Object.keys(metricsStore?.metrics.cr || {})
 
 </script>
