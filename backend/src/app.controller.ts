@@ -1,6 +1,6 @@
 import {
   Controller,
-  FileTypeValidator,
+  FileTypeValidator, HttpCode,
   HttpStatus,
   ParseFilePipe,
   Post,
@@ -16,6 +16,7 @@ export class AppController {
   constructor(private readonly appService: AppService) {}
 
   @Post('/upload-sheet')
+  @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
   async getSheet(
     @UploadedFile(

@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import * as csvParser from 'csv-parser';
 import * as xlsx from 'xlsx';
-import { Subscriber } from './types/subscriber.type';
 import { FileException } from './exceptions/file.exception';
-import { MetricsByMonth } from './dto/metrics-by-month.dto';
-import { MonthMetrics } from './dto/month-metrics.dto';
+import { RawSubscriberType } from './types/raw-subscriber.type';
+import { Metrics } from './dto/metrics.dto';
+import { SubscriberDto } from './dto/subscriber.dto';
 
 @Injectable()
 export class AppService {
@@ -15,7 +15,7 @@ export class AppService {
   async processFile(file: Express.Multer.File) {
     const processes: Record<
       string,
-      (file: Express.Multer.File) => Promise<Subscriber[]>
+      (file: Express.Multer.File) => Promise<SubscriberDto[]>
     > = {
       [this.csvMimeType]: this.processCsv,
       [this.xlsxMimeType]: this.processXlsx,
@@ -34,12 +34,12 @@ export class AppService {
 
   private processCsv = async (
     file: Express.Multer.File,
-  ): Promise<Subscriber[]> => {
-    const subscribers: Subscriber[] = [];
+  ): Promise<SubscriberDto[]> => {
+    const subscribers: SubscriberDto[] = [];
 
     csvParser()
-      .on('data', (subscriber: Subscriber) => {
-        subscribers.push(this.parseSubscribersDate(subscriber));
+      .on('data', (subscriber: RawSubscriberType) => {
+        subscribers.push(new SubscriberDto(subscriber));
       })
       .write(file.buffer);
 
@@ -48,51 +48,25 @@ export class AppService {
 
   private processXlsx = async (
     file: Express.Multer.File,
-  ): Promise<Subscriber[]> => {
+  ): Promise<SubscriberDto[]> => {
     const workbook = xlsx.read(file.buffer);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const subscribers: Subscriber[] = xlsx.utils.sheet_to_json(sheet, {
+    const subscribers: RawSubscriberType[] = xlsx.utils.sheet_to_json(sheet, {
       raw: false,
     });
 
-    subscribers.forEach(this.parseSubscribersDate);
-
-    return subscribers;
+    return subscribers.map((subscriber) => new SubscriberDto(subscriber));
   };
 
-  private calculateMetrics = (subscribers: Subscriber[]) => {
-    const metricsByMonth = new MetricsByMonth();
+  private calculateMetrics = (subscribers: SubscriberDto[]) => {
+    const metrics = new Metrics();
 
     subscribers.forEach((subscriber) => {
-      const month = subscriber['data início'].getMonth();
-      const metrics = metricsByMonth.getMetricsForMonth(month);
-      this.executeActionBasedOnSubscriberStatus(metrics, subscriber);
+      metrics.setSubscriber(subscriber);
+
+      metrics.calculateMetrics();
     });
 
-    return metricsByMonth.getMetrics();
-  };
-
-  private executeActionBasedOnSubscriberStatus = (
-    metrics: MonthMetrics,
-    subscriber: Subscriber,
-  ) => {
-    const subscriberStatusActions = {
-      Ativa: (metrics: MonthMetrics, subscriber: Subscriber) =>
-        metrics.addActiveSubscriber(subscriber.valor),
-      Cancelada: (metrics: MonthMetrics) => metrics.addCancelledSubscriber(),
-    };
-
-    const action = subscriberStatusActions[subscriber.status];
-    if (action) {
-      action(metrics, subscriber);
-    }
-  };
-
-  private parseSubscribersDate = (subscriber: Subscriber) => {
-    subscriber['data início'] = new Date(subscriber['data início']);
-    subscriber['data status'] = new Date(subscriber['data status']);
-    subscriber['data cancelamento'] = new Date(subscriber['data cancelamento']);
-
-    return subscriber;
+    return metrics.metrics;
   };
 }
